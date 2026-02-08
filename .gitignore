@@ -9,3 +9,6 @@ coverage/
 __pycache__/
 *.pyc
 .cache/
+
+FRONTEND_DESIGN.md
+POLISH_NOTES.md
