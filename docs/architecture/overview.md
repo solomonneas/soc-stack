@@ -1,4 +1,4 @@
-# SOC Stack Architecture
+# S³ Stack Architecture
 
 ## Design Principles
 

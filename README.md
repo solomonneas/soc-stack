@@ -1,6 +1,29 @@
-# SOC Stack
+# Solomon's S³ Stack
 
 A unified, AI-augmented Security Operations Center toolkit. Integrates open-source security tools with MCP (Model Context Protocol) servers for AI-driven detection, investigation, and response.
+
+## Quick Start
+
+Deploy Solomon's S³ Stack on Proxmox VE with one command:
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/solomonneas/soc-stack/main/scripts/setup/install.sh)"
+```
+
+> Requires Proxmox VE 7.x or 8.x. Run on the Proxmox host (not inside a VM/container).
+
+### What Gets Deployed
+
+| Component | Description | Default Port |
+|-----------|-------------|-------------|
+| Wazuh 4.x | SIEM/XDR Platform | 443, 55000 |
+| TheHive 5.x | Case Management | 9000 |
+| Cortex 3.x | SOAR/Analyzers | 9001 |
+| MISP | Threat Intel Platform | 443 |
+| Zeek | Network Monitor | N/A |
+| Suricata | IDS/IPS Engine | N/A |
+
+The installer provides an interactive menu (whiptail) to select components, deployment type (LXC or VM), resource presets, and network configuration. All components are automatically integrated post-install.
 
 ## What Is This?
 
