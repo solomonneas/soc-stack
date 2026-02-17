@@ -23,7 +23,14 @@ bash -c "$(wget -qLO - https://raw.githubusercontent.com/solomonneas/soc-stack/m
 | Zeek | Network Monitor | N/A |
 | Suricata | IDS/IPS Engine | N/A |
 
-The installer provides an interactive menu (whiptail) to select components, deployment type (LXC or VM), resource presets, and network configuration. All components are automatically integrated post-install.
+### Optional Add-ons
+
+| Add-on | Description | Deployment |
+|--------|-------------|------------|
+| **Custom Dashboards** | Bro Hunter (Zeek threat hunting) + Playbook Forge (IR playbook builder) | Shared LXC with nginx |
+| **MCP Servers** | AI integration connectors for all SOC components | Node.js on host or container |
+
+The installer provides an interactive menu (whiptail) to select components, deployment type (LXC or VM), resource presets, and network configuration. All components are automatically integrated post-install. Custom dashboards are deployed in a shared LXC container with nginx reverse proxy, accessible at `/bro-hunter/` and `/playbook-forge/`.
 
 ## What Is This?
 

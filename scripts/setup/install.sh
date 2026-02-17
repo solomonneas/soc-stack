@@ -41,6 +41,8 @@ IP_RANGE=""
 STORAGE="local-lvm"
 PRESET="standard"
 INSTALL_MCP="no"
+INSTALL_DASHBOARDS="no"
+DASHBOARD_DEPLOY="lxc"
 
 # ── Component Definitions ─────────────────────────────────────────────────────
 declare -A COMP_NAMES=(
@@ -323,6 +325,22 @@ ask_mcp() {
   fi
 }
 
+ask_dashboards() {
+  if whiptail --title "S³ Stack: Custom Dashboards" \
+    --yesno "Install custom analysis dashboards?\n\nThis deploys two tools built for the S³ Stack:\n\n  - Bro Hunter: Zeek log analysis and threat hunting\n  - Playbook Forge: IR playbook builder with visual flowcharts\n\nBoth are served from a single LXC container with nginx\nreverse proxy (recommended). Minimal resource overhead." 16 74; then
+    INSTALL_DASHBOARDS="yes"
+
+    DASHBOARD_DEPLOY=$(whiptail --title "S³ Stack: Dashboard Deploy Type" \
+      --radiolist "How should the dashboards be deployed?" 14 74 2 \
+      "lxc"    "Shared LXC Container (recommended, ~1GB RAM)" ON \
+      "vm"     "Virtual Machine (full isolation, more resources)" OFF \
+      3>&1 1>&2 2>&3) || { msg_error "Cancelled"; exit 1; }
+    DASHBOARD_DEPLOY="${DASHBOARD_DEPLOY//\"/}"
+  else
+    INSTALL_DASHBOARDS="no"
+  fi
+}
+
 show_confirmation() {
   local summary="Solomon's S³ Stack Installation Summary\n\n"
   summary+="Preset:  ${PRESET}\n"
@@ -331,7 +349,10 @@ show_confirmation() {
   [[ -n "$VLAN_TAG" ]] && summary+=" (VLAN ${VLAN_TAG})"
   summary+="\nIP Mode: ${IP_MODE}"
   [[ "$IP_MODE" == "static" ]] && summary+=" (${IP_RANGE})"
-  summary+="\nMCP:     ${INSTALL_MCP}\n\n"
+  summary+="\nMCP:     ${INSTALL_MCP}"
+  summary+="\nDashboards: ${INSTALL_DASHBOARDS}"
+  [[ "$INSTALL_DASHBOARDS" == "yes" ]] && summary+=" (${DASHBOARD_DEPLOY})"
+  summary+="\n\n"
   summary+="Components:\n"
 
   for i in "${!SELECTED_COMPONENTS[@]}"; do
@@ -572,6 +593,25 @@ generate_summary() {
   echo -e "    MISP:     admin@admin.test / admin"
   echo -e "${GN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}"
   echo ""
+  if [[ "$INSTALL_DASHBOARDS" == "yes" ]]; then
+    local dash_vmid="N/A"
+    [[ -f "${TEMP_DIR}/vmid_dashboards" ]] && dash_vmid="$(cat "${TEMP_DIR}/vmid_dashboards")"
+    local dash_pass="N/A"
+    [[ -f "${TEMP_DIR}/pass_dashboards" ]] && dash_pass="$(cat "${TEMP_DIR}/pass_dashboards")"
+    local dash_ip="DHCP"
+    if [[ "$dash_vmid" != "N/A" ]]; then
+      dash_ip=$(pct exec "$dash_vmid" -- hostname -I 2>/dev/null | awk '{print $1}') || dash_ip="DHCP"
+    fi
+
+    echo -e "${GN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}"
+    echo -e "  ${CY}Custom Dashboards${CL} (${DASHBOARD_DEPLOY^^} #${dash_vmid})"
+    echo -e "    IP:             ${dash_ip}"
+    echo -e "    Bro Hunter:     http://${dash_ip}/bro-hunter/"
+    echo -e "    Playbook Forge: http://${dash_ip}/playbook-forge/"
+    echo -e "    Pass:           ${dash_pass}"
+    echo ""
+  fi
+
   echo -e "  Log file:    ${CY}${LOG_FILE}${CL}"
   echo -e "  Integration: ${CY}bash /root/s3-integrate.sh${CL}"
   echo ""
@@ -586,6 +626,11 @@ generate_summary() {
       [[ -f "${TEMP_DIR}/vmid_${comp}" ]] && vmid="$(cat "${TEMP_DIR}/vmid_${comp}")"
       echo "${COMP_NAMES[$comp]}: VMID=${vmid}"
     done
+    if [[ "$INSTALL_DASHBOARDS" == "yes" ]]; then
+      local d_vmid="N/A"
+      [[ -f "${TEMP_DIR}/vmid_dashboards" ]] && d_vmid="$(cat "${TEMP_DIR}/vmid_dashboards")"
+      echo "Dashboards (Bro Hunter + Playbook Forge): VMID=${d_vmid}"
+    fi
   } > /root/s3-stack-summary.txt
 
   msg_ok "Summary saved to /root/s3-stack-summary.txt"
@@ -625,6 +670,7 @@ BANNER
   select_network
   select_storage
   ask_mcp
+  ask_dashboards
   show_confirmation
 
   echo ""
@@ -667,6 +713,90 @@ BANNER
   if [[ "$INSTALL_MCP" == "yes" ]]; then
     msg_info "MCP server installation"
     msg_warn "MCP servers require Node.js 18+. Install separately from the soc-stack repo."
+  fi
+
+  # ── Deploy Custom Dashboards (Bro Hunter + Playbook Forge) ────────────────
+  if [[ "$INSTALL_DASHBOARDS" == "yes" ]]; then
+    msg_info "Deploying S³ Stack Dashboards (Bro Hunter + Playbook Forge)"
+
+    local dash_vmid
+    dash_vmid="$(get_next_vmid)"
+    echo "$dash_vmid" > "${TEMP_DIR}/vmid_dashboards"
+
+    if [[ "$DASHBOARD_DEPLOY" == "lxc" ]]; then
+      # Create LXC with dashboard-appropriate resources (1GB RAM, 15GB disk, 2 cores)
+      local dash_hostname="s3-dashboards"
+      local dash_pass
+      dash_pass="$(openssl rand -base64 12 2>/dev/null || echo 's3dashboards')"
+
+      msg_info "Creating LXC container for dashboards (ID: ${dash_vmid})"
+
+      local template
+      template="$(ls /var/lib/vz/template/cache/debian-12-standard* 2>/dev/null | head -1)"
+      [[ -z "$template" ]] && template="$(ls /var/lib/vz/template/cache/ubuntu-24* 2>/dev/null | head -1)"
+
+      local net_config="name=eth0,bridge=${BRIDGE}"
+      [[ -n "$VLAN_TAG" ]] && net_config+=",tag=${VLAN_TAG}"
+      [[ "$IP_MODE" == "dhcp" ]] && net_config+=",ip=dhcp"
+
+      pct create "$dash_vmid" "$template" \
+        --hostname "$dash_hostname" \
+        --password "$dash_pass" \
+        --storage "$STORAGE" \
+        --rootfs "${STORAGE}:15" \
+        --memory 1024 \
+        --cores 2 \
+        --net0 "$net_config" \
+        --unprivileged 1 \
+        --features nesting=1 \
+        --onboot 1 \
+        --start 0 &>/dev/null
+
+      echo "$dash_pass" > "${TEMP_DIR}/pass_dashboards"
+      msg_ok "Created LXC ${dash_hostname} (ID: ${dash_vmid})"
+
+      pct start "$dash_vmid" &>/dev/null || true
+      sleep 5
+
+      # Wait for network
+      local retries=0
+      while ! pct exec "$dash_vmid" -- ping -c1 -W2 8.8.8.8 &>/dev/null; do
+        ((retries++))
+        [[ $retries -ge 30 ]] && { msg_warn "Network timeout for dashboards container"; break; }
+        sleep 2
+      done
+
+      # Push and run install script
+      local dash_script="${TEMP_DIR}/dashboards.sh"
+      wget -qO "$dash_script" "${REPO_URL}/scripts/setup/components/dashboards.sh" 2>/dev/null || true
+      if [[ -f "$dash_script" && -s "$dash_script" ]]; then
+        pct push "$dash_vmid" "$dash_script" "/tmp/dashboards.sh" &>/dev/null
+        pct exec "$dash_vmid" -- bash "/tmp/dashboards.sh" &>> "$LOG_FILE" || true
+      fi
+
+      # Wire Zeek log access if Zeek container exists
+      local zeek_vmid_file="${TEMP_DIR}/vmid_zeek"
+      if [[ -f "$zeek_vmid_file" ]]; then
+        local zeek_vmid
+        zeek_vmid="$(cat "$zeek_vmid_file")"
+        msg_info "Configuring Zeek log bind mount for dashboards container"
+        # Create mount point on host
+        local zeek_log_host="/var/lib/lxc/${zeek_vmid}/rootfs/opt/zeek/logs"
+        if [[ -d "$zeek_log_host" ]]; then
+          pct set "$dash_vmid" -mp0 "${zeek_log_host},mp=/opt/s3-dashboards/zeek-logs,ro=1" &>/dev/null || true
+          msg_ok "Zeek logs mounted read-only at /opt/s3-dashboards/zeek-logs"
+        else
+          msg_warn "Zeek log directory not found yet. Configure bind mount manually after Zeek generates logs."
+        fi
+      fi
+
+      local dash_ip
+      dash_ip=$(pct exec "$dash_vmid" -- hostname -I 2>/dev/null | awk '{print $1}') || dash_ip="DHCP"
+      msg_ok "S³ Dashboards deployed at http://${dash_ip}/"
+    else
+      create_vm "dashboards" "$dash_vmid"
+      msg_warn "Dashboards VM created but requires manual OS install and script execution"
+    fi
   fi
 
   generate_summary
