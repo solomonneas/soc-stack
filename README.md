@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://solomonneas.dev/projects/soc-stack-architecture"><img src="https://img.shields.io/badge/Portfolio-solomonneas.dev-22c55e?style=flat-square" alt="Portfolio" /></a>
+</p>
+
 # Solomon's S³ Stack
 
 A unified, AI-augmented Security Operations Center toolkit. Integrates open-source security tools with MCP (Model Context Protocol) servers for AI-driven detection, investigation, and response.
