@@ -57,7 +57,7 @@ SELECT agent_name, data.srcip, data.dstuser, data.logon_type,
 FROM alerts
 WHERE rule.groups LIKE '%authentication%'
   AND data.logon_type = '3'
-  AND data.srcip NOT IN ('10.0.1.1', '10.0.1.2')  -- Exclude known DCs
+  AND data.srcip NOT IN ('198.51.100.1', '198.51.100.2')  -- Exclude known DCs
   AND rule.level >= 8
 ORDER BY timestamp DESC
 LIMIT 100;
@@ -75,7 +75,7 @@ Lateral movement is a mid-stage tactic (MITRE TA0008). By the time you detect it
 ```
 # Via wazuh-mcp: Get all alerts from the suspected source
 wazuh-mcp.get_alerts({
-  src_ip: "10.0.1.50",
+  src_ip: "198.51.100.50",
   level: ">6",
   timeframe: "48h"
 })
@@ -94,12 +94,12 @@ wazuh-mcp.get_alerts({
 
 ```
 # Via zeek-mcp: Get ALL connections from the source host
-zeek-mcp.investigate_host("10.0.1.50")
+zeek-mcp.investigate_host("198.51.100.50")
 
 # Focus on internal connections (filter out internet traffic)
 zeek-mcp.query_connections({
-  src_ip: "10.0.1.50",
-  dst_subnet: "10.0.0.0/8",
+  src_ip: "198.51.100.50",
+  dst_subnet: "198.51.100.0/8",
   timeframe: "48h"
 })
 
@@ -111,20 +111,20 @@ zeek-mcp.query_connections({
 #   22 (SSH) - Linux lateral movement
 ```
 
-**Key Insight:** Build a connection graph. If workstation A (10.0.1.50) connects to server B (10.0.1.20) on port 445, and then server B connects to domain controller C (10.0.1.1) on port 445, you have a two-hop lateral movement chain.
+**Key Insight:** Build a connection graph. If workstation A (198.51.100.50) connects to server B (198.51.100.20) on port 445, and then server B connects to domain controller C (198.51.100.1) on port 445, you have a two-hop lateral movement chain.
 
 ### Step 3: Check Suricata for Signature Matches
 
 ```
 # Via suricata-mcp: Look for lateral movement signatures
 suricata-mcp.get_alerts({
-  src_ip: "10.0.1.50",
+  src_ip: "198.51.100.50",
   timeframe: "48h"
 })
 
 # Also check the intermediate hosts
 suricata-mcp.get_alerts({
-  src_ip: "10.0.1.20",
+  src_ip: "198.51.100.20",
   timeframe: "48h"
 })
 
@@ -139,7 +139,7 @@ suricata-mcp.get_alerts({
 ```
 # Via wazuh-mcp: Find all accounts used from the source
 wazuh-mcp.get_alerts({
-  src_ip: "10.0.1.50",
+  src_ip: "198.51.100.50",
   rule_group: "authentication_success",
   timeframe: "48h"
 })
@@ -156,21 +156,21 @@ wazuh-mcp.get_alerts({
 ```
 # Via zeek-mcp: Look for large data transfers from compromised hosts
 zeek-mcp.query_connections({
-  src_ip: "10.0.1.50",
+  src_ip: "198.51.100.50",
   min_bytes: 10000000,  # >10 MB transfers
   timeframe: "48h"
 })
 
 # Check for external connections (exfiltration)
 zeek-mcp.query_connections({
-  src_ip: "10.0.1.50",
-  dst_subnet: "!10.0.0.0/8",  # Non-internal
+  src_ip: "198.51.100.50",
+  dst_subnet: "!198.51.100.0/8",  # Non-internal
   timeframe: "48h"
 })
 
 # Check DNS for data exfiltration via DNS tunneling
 zeek-mcp.query_dns({
-  src_ip: "10.0.1.50",
+  src_ip: "198.51.100.50",
   min_query_length: 50  # Long DNS queries suggest tunneling
 })
 ```
@@ -253,7 +253,7 @@ wazuh-mcp.get_alerts({
 ```
 # Verify isolated endpoints cannot reach other systems
 # From an isolated host, attempt to ping the gateway:
-ping 10.0.1.1  # Should timeout
+ping 198.51.100.1  # Should timeout
 
 # Verify compromised accounts are disabled
 # Check AD account status
@@ -267,7 +267,7 @@ ping 10.0.1.1  # Should timeout
 -- Confirm no new lateral movement alerts from contained hosts
 SELECT agent_name, rule.description, data.srcip, data.dstip, timestamp
 FROM alerts
-WHERE data.srcip IN ('10.0.1.50', '10.0.1.20')
+WHERE data.srcip IN ('198.51.100.50', '198.51.100.20')
   AND rule.groups LIKE '%authentication%'
   AND timestamp > 'containment-time'
 ORDER BY timestamp DESC;
@@ -308,7 +308,7 @@ An AI assistant can significantly accelerate lateral movement investigation:
 
 **Example AI prompt:**
 ```
-"We have a suspected lateral movement incident originating from 10.0.1.50. Map all internal
+"We have a suspected lateral movement incident originating from 198.51.100.50. Map all internal
 connections from this host in the last 48 hours. For each destination host, check Wazuh for
 authentication events and Suricata for lateral movement signatures. Build a timeline showing
 the attacker's path and create a TheHive case with all findings."

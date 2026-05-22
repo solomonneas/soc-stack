@@ -217,7 +217,7 @@ For smaller deployments, TheHive and MISP can share a single VM. The MCP gateway
 
 ```
 ┌──────────────────────────────────────────────────┐
-│                  Management VLAN (10.0.1.0/24)   │
+│                  Management VLAN (198.51.100.0/24)   │
 │                                                   │
 │  wazuh-manager  .10    thehive     .20            │
 │  misp           .30    mcp-gateway .40            │
@@ -232,7 +232,7 @@ For smaller deployments, TheHive and MISP can share a single VM. The MCP gateway
             ▼                     │
 ┌────────────────────┐            │
 │ Sensor VLAN        │            │
-│ (10.0.2.0/24)      │            │
+│ (198.51.100.0/24)      │            │
 │                     │            │
 │ sensor-01  .10      │            │
 │ (Zeek + Suricata)   │            │

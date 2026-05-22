@@ -223,9 +223,9 @@ MISP_VERIFY_SSL=false  # Optional
 **Example Queries:**
 
 ```
-"Show all DNS queries from 10.0.1.50 in the last hour"
+"Show all DNS queries from 198.51.100.50 in the last hour"
 "What HTTP requests went to domains registered in the last 30 days?"
-"Investigate all network activity for host 192.168.1.105"
+"Investigate all network activity for host 192.0.2.105"
 "Find all SSL connections with an expired certificate"
 "Which hosts downloaded executable files today?"
 ```
